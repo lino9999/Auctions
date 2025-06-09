@@ -36,6 +36,8 @@ public class Auctions extends JavaPlugin implements Listener {
     private Map<UUID, Double> pendingPrices = new HashMap<>();
     private Map<UUID, ItemStack> pendingItems = new HashMap<>();
     private Map<UUID, LocalDateTime> lastClaim = new HashMap<>();
+    private Map<UUID, String> pendingPurchase = new HashMap<>();
+    private Map<UUID, String> pendingCancellation = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -177,6 +179,9 @@ public class Auctions extends JavaPlugin implements Listener {
         inv.setItem(45, createMenuItem(Material.HOPPER, ChatColor.YELLOW + "☀ Expired Items",
                 Arrays.asList(ChatColor.GRAY + "View expired auctions", ChatColor.AQUA + "1 free claim per day!")));
 
+        inv.setItem(53, createMenuItem(Material.SUNFLOWER, ChatColor.AQUA + "⟳ Refresh",
+                Arrays.asList(ChatColor.GRAY + "Click to update the list", ChatColor.YELLOW + "See latest auctions!")));
+
         try {
             PreparedStatement ps = connection.prepareStatement(
                     "SELECT * FROM auctions WHERE expired = 0 ORDER BY time DESC"
@@ -189,6 +194,7 @@ public class Auctions extends JavaPlugin implements Listener {
                 byte[] itemData = rs.getBytes("item");
                 double price = rs.getDouble("price");
                 String sellerName = rs.getString("seller_name");
+                String sellerUUID = rs.getString("seller_uuid");
                 long time = rs.getLong("time");
 
                 ItemStack item = deserializeItem(itemData);
@@ -207,7 +213,12 @@ public class Auctions extends JavaPlugin implements Listener {
                     lore.add(ChatColor.RED + "✦ Expires in: " + ChatColor.WHITE + hoursLeft + " hours");
 
                     lore.add(ChatColor.DARK_PURPLE + "═══════════════");
-                    lore.add(ChatColor.GREEN + "» Click to purchase!");
+
+                    if (sellerUUID.equals(player.getUniqueId().toString())) {
+                        lore.add(ChatColor.RED + "» Click to cancel auction!");
+                    } else {
+                        lore.add(ChatColor.GREEN + "» Click to purchase!");
+                    }
                     lore.add(ChatColor.DARK_GRAY + "ID: " + auctionId);
 
                     meta.setLore(lore);
@@ -328,8 +339,14 @@ public class Auctions extends JavaPlugin implements Listener {
                 openSellMenu(player);
             } else if (e.getSlot() == 45) {
                 openExpiredAuction(player);
+            } else if (e.getSlot() == 53) {
+                player.closeInventory();
+                player.performCommand("ah");
             } else if (e.getSlot() >= 9 && e.getSlot() < 45) {
-                handlePurchase(player, e.getCurrentItem());
+                String auctionId = getAuctionIdFromLore(e.getCurrentItem());
+                if (auctionId != null) {
+                    checkAuctionOwnership(player, auctionId);
+                }
             }
         } else if (title.contains("Expired Auctions")) {
             e.setCancelled(true);
@@ -364,6 +381,29 @@ public class Auctions extends JavaPlugin implements Listener {
                 } else if (e.getRawSlot() == 18) {
                     player.closeInventory();
                 }
+            }
+        } else if (title.contains("Confirm Purchase") || title.contains("Cancel Auction")) {
+            e.setCancelled(true);
+
+            if (e.getCurrentItem() == null || e.getCurrentItem().getType() == Material.AIR) return;
+
+            if (e.getSlot() == 11 && e.getCurrentItem().getType() == Material.EMERALD_BLOCK) {
+                if (title.contains("Confirm Purchase")) {
+                    String auctionId = pendingPurchase.remove(player.getUniqueId());
+                    if (auctionId != null) {
+                        executePurchase(player, auctionId);
+                    }
+                } else {
+                    String auctionId = pendingCancellation.remove(player.getUniqueId());
+                    if (auctionId != null) {
+                        cancelAuction(player, auctionId);
+                    }
+                }
+            } else if (e.getSlot() == 15 && e.getCurrentItem().getType() == Material.BARRIER) {
+                pendingPurchase.remove(player.getUniqueId());
+                pendingCancellation.remove(player.getUniqueId());
+                player.closeInventory();
+                openMainAuction(player);
             }
         }
     }
@@ -472,10 +512,114 @@ public class Auctions extends JavaPlugin implements Listener {
         }
     }
 
-    private void handlePurchase(Player buyer, ItemStack displayItem) {
-        String auctionId = getAuctionIdFromLore(displayItem);
-        if (auctionId == null) return;
+    private void checkAuctionOwnership(Player player, String auctionId) {
+        try {
+            PreparedStatement ps = connection.prepareStatement(
+                    "SELECT seller_uuid FROM auctions WHERE id = ? AND expired = 0"
+            );
+            ps.setString(1, auctionId);
+            ResultSet rs = ps.executeQuery();
 
+            if (rs.next()) {
+                String sellerUUID = rs.getString("seller_uuid");
+                if (sellerUUID.equals(player.getUniqueId().toString())) {
+                    openCancellationConfirm(player, auctionId);
+                } else {
+                    openPurchaseConfirm(player, auctionId);
+                }
+            }
+
+            rs.close();
+            ps.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void openPurchaseConfirm(Player player, String auctionId) {
+        try {
+            PreparedStatement ps = connection.prepareStatement(
+                    "SELECT * FROM auctions WHERE id = ? AND expired = 0"
+            );
+            ps.setString(1, auctionId);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                ItemStack item = deserializeItem(rs.getBytes("item"));
+                double price = rs.getDouble("price");
+                String sellerName = rs.getString("seller_name");
+
+                Inventory inv = Bukkit.createInventory(null, 27, ChatColor.DARK_GREEN + "✦ Confirm Purchase ✦");
+
+                for (int i = 0; i < 27; i++) {
+                    inv.setItem(i, createGlassPane(Material.BLACK_STAINED_GLASS_PANE, " "));
+                }
+
+                inv.setItem(13, item);
+
+                inv.setItem(11, createMenuItem(Material.EMERALD_BLOCK, ChatColor.GREEN + "✔ CONFIRM",
+                        Arrays.asList(
+                                ChatColor.GRAY + "Price: " + ChatColor.GOLD + "$" + price,
+                                ChatColor.GRAY + "Seller: " + ChatColor.WHITE + sellerName,
+                                ChatColor.YELLOW + "Click to purchase!"
+                        )));
+
+                inv.setItem(15, createMenuItem(Material.BARRIER, ChatColor.RED + "✘ CANCEL",
+                        Arrays.asList(ChatColor.GRAY + "Return to auctions")));
+
+                pendingPurchase.put(player.getUniqueId(), auctionId);
+                player.openInventory(inv);
+            }
+
+            rs.close();
+            ps.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void openCancellationConfirm(Player player, String auctionId) {
+        try {
+            PreparedStatement ps = connection.prepareStatement(
+                    "SELECT * FROM auctions WHERE id = ? AND expired = 0"
+            );
+            ps.setString(1, auctionId);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                ItemStack item = deserializeItem(rs.getBytes("item"));
+                double price = rs.getDouble("price");
+
+                Inventory inv = Bukkit.createInventory(null, 27, ChatColor.DARK_RED + "☠ Cancel Auction? ☠");
+
+                for (int i = 0; i < 27; i++) {
+                    inv.setItem(i, createGlassPane(Material.RED_STAINED_GLASS_PANE, " "));
+                }
+
+                inv.setItem(13, item);
+
+                inv.setItem(11, createMenuItem(Material.EMERALD_BLOCK, ChatColor.RED + "✔ CANCEL AUCTION",
+                        Arrays.asList(
+                                ChatColor.GRAY + "Current Price: " + ChatColor.GOLD + "$" + price,
+                                ChatColor.YELLOW + "Item will be returned",
+                                ChatColor.RED + "This cannot be undone!"
+                        )));
+
+                inv.setItem(15, createMenuItem(Material.BARRIER, ChatColor.GREEN + "✘ KEEP AUCTION",
+                        Arrays.asList(ChatColor.GRAY + "Return to auctions")));
+
+                pendingCancellation.put(player.getUniqueId(), auctionId);
+                player.openInventory(inv);
+            }
+
+            rs.close();
+            ps.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void executePurchase(Player buyer, String auctionId) {
         try {
             PreparedStatement ps = connection.prepareStatement(
                     "SELECT * FROM auctions WHERE id = ? AND expired = 0"
@@ -487,13 +631,9 @@ public class Auctions extends JavaPlugin implements Listener {
                 double price = rs.getDouble("price");
                 String sellerUUID = rs.getString("seller_uuid");
 
-                if (sellerUUID.equals(buyer.getUniqueId().toString())) {
-                    buyer.sendMessage(ChatColor.RED + "✘ You cannot buy your own auction!");
-                    return;
-                }
-
                 if (!economy.has(buyer, price)) {
                     buyer.sendMessage(ChatColor.RED + "✘ Insufficient funds! You need $" + price);
+                    buyer.closeInventory();
                     return;
                 }
 
@@ -522,6 +662,37 @@ public class Auctions extends JavaPlugin implements Listener {
 
             rs.close();
             ps.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void cancelAuction(Player player, String auctionId) {
+        try {
+            PreparedStatement ps = connection.prepareStatement(
+                    "SELECT * FROM auctions WHERE id = ? AND expired = 0"
+            );
+            ps.setString(1, auctionId);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                ItemStack item = deserializeItem(rs.getBytes("item"));
+                if (item != null) {
+                    player.getInventory().addItem(item);
+                    player.sendMessage(ChatColor.GREEN + "✔ Auction cancelled! Item returned to your inventory.");
+
+                    PreparedStatement deletePs = connection.prepareStatement("DELETE FROM auctions WHERE id = ?");
+                    deletePs.setString(1, auctionId);
+                    deletePs.executeUpdate();
+                    deletePs.close();
+                }
+            }
+
+            rs.close();
+            ps.close();
+
+            player.closeInventory();
+            openMainAuction(player);
         } catch (SQLException e) {
             e.printStackTrace();
         }
