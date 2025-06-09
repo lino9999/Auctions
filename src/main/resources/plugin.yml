@@ -4,10 +4,18 @@ main: com.Lino.auctions.Auctions
 api-version: '1.21'
 depend: [Vault]
 author: Lino
-description: Advanced auction system for players
+description: Advanced auction system with expired item reclaim
 
 commands:
   auction:
     description: Main auction command
     aliases: [ah]
-    usage: /<command> [sell/expired]
+    usage: /<command> [sell/expired/reload]
+
+permissions:
+  auctions.reload:
+    description: Allows reloading the plugin configuration
+    default: op
+  auctions.use:
+    description: Allows using the auction system
+    default: true

@@ -5,8 +5,10 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.Sound;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -33,14 +35,17 @@ import java.util.*;
 public class Auctions extends JavaPlugin implements Listener {
     private Economy economy;
     private Connection connection;
+    private FileConfiguration config;
     private Map<UUID, Double> pendingPrices = new HashMap<>();
     private Map<UUID, ItemStack> pendingItems = new HashMap<>();
-    private Map<UUID, LocalDateTime> lastClaim = new HashMap<>();
     private Map<UUID, String> pendingPurchase = new HashMap<>();
     private Map<UUID, String> pendingCancellation = new HashMap<>();
 
     @Override
     public void onEnable() {
+        saveDefaultConfig();
+        config = getConfig();
+
         if (!setupEconomy()) {
             getLogger().severe("Vault dependency not found! Disabling plugin.");
             getServer().getPluginManager().disablePlugin(this);
@@ -49,7 +54,6 @@ public class Auctions extends JavaPlugin implements Listener {
 
         getServer().getPluginManager().registerEvents(this, this);
         initDatabase();
-        loadClaimData();
 
         new BukkitRunnable() {
             @Override
@@ -61,7 +65,6 @@ public class Auctions extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
-        saveClaimData();
         if (connection != null) {
             try {
                 connection.close();
@@ -99,49 +102,7 @@ public class Auctions extends JavaPlugin implements Listener {
                             "expired BOOLEAN DEFAULT 0)"
             );
 
-            stmt.executeUpdate(
-                    "CREATE TABLE IF NOT EXISTS claims (" +
-                            "player_uuid TEXT PRIMARY KEY," +
-                            "last_claim TEXT NOT NULL)"
-            );
-
             stmt.close();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void loadClaimData() {
-        try {
-            PreparedStatement ps = connection.prepareStatement("SELECT * FROM claims");
-            ResultSet rs = ps.executeQuery();
-
-            while (rs.next()) {
-                UUID uuid = UUID.fromString(rs.getString("player_uuid"));
-                LocalDateTime time = LocalDateTime.parse(rs.getString("last_claim"));
-                lastClaim.put(uuid, time);
-            }
-
-            rs.close();
-            ps.close();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void saveClaimData() {
-        try {
-            PreparedStatement ps = connection.prepareStatement(
-                    "REPLACE INTO claims (player_uuid, last_claim) VALUES (?, ?)"
-            );
-
-            for (Map.Entry<UUID, LocalDateTime> entry : lastClaim.entrySet()) {
-                ps.setString(1, entry.getKey().toString());
-                ps.setString(2, entry.getValue().toString());
-                ps.executeUpdate();
-            }
-
-            ps.close();
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -149,10 +110,21 @@ public class Auctions extends JavaPlugin implements Listener {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!(sender instanceof Player)) return true;
-        Player player = (Player) sender;
-
         if (label.equalsIgnoreCase("auction") || label.equalsIgnoreCase("ah")) {
+            if (args.length > 0 && args[0].equalsIgnoreCase("reload")) {
+                if (sender.hasPermission("auctions.reload")) {
+                    reloadConfig();
+                    config = getConfig();
+                    sender.sendMessage(getMessage("messages.reload"));
+                } else {
+                    sender.sendMessage(getMessage("messages.no-permission"));
+                }
+                return true;
+            }
+
+            if (!(sender instanceof Player)) return true;
+            Player player = (Player) sender;
+
             if (args.length == 0) {
                 openMainAuction(player);
             } else if (args[0].equalsIgnoreCase("expired")) {
@@ -166,21 +138,21 @@ public class Auctions extends JavaPlugin implements Listener {
     }
 
     private void openMainAuction(Player player) {
-        Inventory inv = Bukkit.createInventory(null, 54, ChatColor.DARK_PURPLE + "✦ " + ChatColor.LIGHT_PURPLE + "Active Auctions" + ChatColor.DARK_PURPLE + " ✦");
+        Inventory inv = Bukkit.createInventory(null, 54, getMessage("gui.main-title"));
 
         for (int i = 0; i < 9; i++) {
             inv.setItem(i, createGlassPane(Material.PURPLE_STAINED_GLASS_PANE, " "));
             inv.setItem(45 + i, createGlassPane(Material.PURPLE_STAINED_GLASS_PANE, " "));
         }
 
-        inv.setItem(49, createMenuItem(Material.EMERALD, ChatColor.GREEN + "✦ Create Auction",
-                Arrays.asList(ChatColor.GRAY + "Click to sell an item", ChatColor.YELLOW + "Left-Click to open")));
+        inv.setItem(49, createMenuItem(Material.EMERALD, getMessage("gui.create-auction"),
+                Arrays.asList(getMessage("gui.create-auction-lore").split("\n"))));
 
-        inv.setItem(45, createMenuItem(Material.HOPPER, ChatColor.YELLOW + "☀ Expired Items",
-                Arrays.asList(ChatColor.GRAY + "View expired auctions", ChatColor.AQUA + "1 free claim per day!")));
+        inv.setItem(45, createMenuItem(Material.HOPPER, getMessage("gui.expired-items"),
+                Arrays.asList(getMessage("gui.expired-items-lore").split("\n"))));
 
-        inv.setItem(53, createMenuItem(Material.SUNFLOWER, ChatColor.AQUA + "⟳ Refresh",
-                Arrays.asList(ChatColor.GRAY + "Click to update the list", ChatColor.YELLOW + "See latest auctions!")));
+        inv.setItem(53, createMenuItem(Material.SUNFLOWER, getMessage("gui.refresh"),
+                Arrays.asList(getMessage("gui.refresh-lore").split("\n"))));
 
         try {
             PreparedStatement ps = connection.prepareStatement(
@@ -205,19 +177,19 @@ public class Auctions extends JavaPlugin implements Listener {
 
                     lore.add("");
                     lore.add(ChatColor.DARK_PURPLE + "═══════════════");
-                    lore.add(ChatColor.GOLD + "✦ Price: " + ChatColor.YELLOW + "$" + price);
-                    lore.add(ChatColor.AQUA + "✦ Seller: " + ChatColor.WHITE + sellerName);
+                    lore.add(getMessage("gui.price-label") + ChatColor.YELLOW + "$" + price);
+                    lore.add(getMessage("gui.seller-label") + ChatColor.WHITE + sellerName);
 
-                    long timeLeft = time + (3 * 24 * 60 * 60 * 1000) - System.currentTimeMillis();
+                    long timeLeft = time + (config.getLong("auction-duration-hours") * 60 * 60 * 1000) - System.currentTimeMillis();
                     long hoursLeft = timeLeft / (1000 * 60 * 60);
-                    lore.add(ChatColor.RED + "✦ Expires in: " + ChatColor.WHITE + hoursLeft + " hours");
+                    lore.add(getMessage("gui.expires-label") + ChatColor.WHITE + hoursLeft + " hours");
 
                     lore.add(ChatColor.DARK_PURPLE + "═══════════════");
 
                     if (sellerUUID.equals(player.getUniqueId().toString())) {
-                        lore.add(ChatColor.RED + "» Click to cancel auction!");
+                        lore.add(getMessage("gui.click-cancel"));
                     } else {
-                        lore.add(ChatColor.GREEN + "» Click to purchase!");
+                        lore.add(getMessage("gui.click-purchase"));
                     }
                     lore.add(ChatColor.DARK_GRAY + "ID: " + auctionId);
 
@@ -235,32 +207,25 @@ public class Auctions extends JavaPlugin implements Listener {
         }
 
         player.openInventory(inv);
+        playSound(player, "open-menu");
     }
 
     private void openExpiredAuction(Player player) {
-        Inventory inv = Bukkit.createInventory(null, 54, ChatColor.DARK_RED + "☠ " + ChatColor.RED + "Expired Auctions" + ChatColor.DARK_RED + " ☠");
+        Inventory inv = Bukkit.createInventory(null, 54, getMessage("gui.expired-title"));
 
         for (int i = 0; i < 9; i++) {
             inv.setItem(i, createGlassPane(Material.RED_STAINED_GLASS_PANE, " "));
             inv.setItem(45 + i, createGlassPane(Material.RED_STAINED_GLASS_PANE, " "));
         }
 
-        inv.setItem(45, createMenuItem(Material.ARROW, ChatColor.YELLOW + "« Back",
-                Arrays.asList(ChatColor.GRAY + "Return to main menu")));
-
-        LocalDateTime lastClaimTime = lastClaim.get(player.getUniqueId());
-        boolean canClaim = lastClaimTime == null || !lastClaimTime.toLocalDate().equals(LocalDateTime.now().toLocalDate());
-
-        inv.setItem(49, createMenuItem(Material.CHEST, ChatColor.GOLD + "✦ Daily Claim",
-                Arrays.asList(
-                        ChatColor.GRAY + "Free claim: " + (canClaim ? ChatColor.GREEN + "Available" : ChatColor.RED + "Used today"),
-                        ChatColor.YELLOW + "Resets at midnight"
-                )));
+        inv.setItem(45, createMenuItem(Material.ARROW, getMessage("gui.back"),
+                Arrays.asList(getMessage("gui.back-lore").split("\n"))));
 
         try {
             PreparedStatement ps = connection.prepareStatement(
-                    "SELECT * FROM auctions WHERE expired = 1"
+                    "SELECT * FROM auctions WHERE expired = 1 AND seller_uuid = ?"
             );
+            ps.setString(1, player.getUniqueId().toString());
             ResultSet rs = ps.executeQuery();
 
             int slot = 9;
@@ -268,7 +233,6 @@ public class Auctions extends JavaPlugin implements Listener {
                 String auctionId = rs.getString("id");
                 byte[] itemData = rs.getBytes("item");
                 double price = rs.getDouble("price");
-                String sellerName = rs.getString("seller_name");
 
                 ItemStack item = deserializeItem(itemData);
                 if (item != null) {
@@ -278,15 +242,9 @@ public class Auctions extends JavaPlugin implements Listener {
 
                     lore.add("");
                     lore.add(ChatColor.DARK_RED + "═══════════════");
-                    lore.add(ChatColor.GRAY + "✦ Original Price: " + ChatColor.RED + "$" + price);
-                    lore.add(ChatColor.GRAY + "✦ Seller: " + ChatColor.WHITE + sellerName);
+                    lore.add(getMessage("gui.original-price-label") + ChatColor.RED + "$" + price);
                     lore.add(ChatColor.DARK_RED + "═══════════════");
-
-                    if (canClaim) {
-                        lore.add(ChatColor.GREEN + "» Click to claim FREE!");
-                    } else {
-                        lore.add(ChatColor.RED + "✘ Daily claim used");
-                    }
+                    lore.add(getMessage("gui.click-reclaim"));
                     lore.add(ChatColor.DARK_GRAY + "ID: " + auctionId);
 
                     meta.setLore(lore);
@@ -303,10 +261,20 @@ public class Auctions extends JavaPlugin implements Listener {
         }
 
         player.openInventory(inv);
+        playSound(player, "open-menu");
     }
 
     private void openSellMenu(Player player) {
-        Inventory inv = Bukkit.createInventory(null, 27, ChatColor.GOLD + "♦ " + ChatColor.YELLOW + "Sell Item" + ChatColor.GOLD + " ♦");
+        int activeAuctions = getPlayerActiveAuctions(player);
+        int maxAuctions = config.getInt("max-auctions-per-player");
+
+        if (activeAuctions >= maxAuctions) {
+            player.sendMessage(getMessage("messages.max-auctions-reached").replace("{max}", String.valueOf(maxAuctions)));
+            playSound(player, "error");
+            return;
+        }
+
+        Inventory inv = Bukkit.createInventory(null, 27, getMessage("gui.sell-title"));
 
         for (int i = 0; i < 27; i++) {
             if (i != 13) {
@@ -314,13 +282,14 @@ public class Auctions extends JavaPlugin implements Listener {
             }
         }
 
-        inv.setItem(22, createMenuItem(Material.EMERALD_BLOCK, ChatColor.GREEN + "✔ Confirm Sale",
-                Arrays.asList(ChatColor.GRAY + "Click after placing item", ChatColor.YELLOW + "You'll set the price next")));
+        inv.setItem(22, createMenuItem(Material.EMERALD_BLOCK, getMessage("gui.confirm-sale"),
+                Arrays.asList(getMessage("gui.confirm-sale-lore").split("\n"))));
 
-        inv.setItem(18, createMenuItem(Material.BARRIER, ChatColor.RED + "✘ Cancel",
-                Arrays.asList(ChatColor.GRAY + "Return to auctions")));
+        inv.setItem(18, createMenuItem(Material.BARRIER, getMessage("gui.cancel"),
+                Arrays.asList(getMessage("gui.cancel-lore").split("\n"))));
 
         player.openInventory(inv);
+        playSound(player, "open-menu");
     }
 
     @EventHandler
@@ -330,35 +299,40 @@ public class Auctions extends JavaPlugin implements Listener {
 
         String title = e.getView().getTitle();
 
-        if (title.contains("Active Auctions")) {
+        if (title.equals(getMessage("gui.main-title"))) {
             e.setCancelled(true);
 
             if (e.getCurrentItem() == null || e.getCurrentItem().getType() == Material.AIR) return;
 
             if (e.getSlot() == 49) {
                 openSellMenu(player);
+                playSound(player, "button-click");
             } else if (e.getSlot() == 45) {
                 openExpiredAuction(player);
+                playSound(player, "button-click");
             } else if (e.getSlot() == 53) {
                 player.closeInventory();
                 player.performCommand("ah");
+                playSound(player, "button-click");
             } else if (e.getSlot() >= 9 && e.getSlot() < 45) {
                 String auctionId = getAuctionIdFromLore(e.getCurrentItem());
                 if (auctionId != null) {
                     checkAuctionOwnership(player, auctionId);
+                    playSound(player, "button-click");
                 }
             }
-        } else if (title.contains("Expired Auctions")) {
+        } else if (title.equals(getMessage("gui.expired-title"))) {
             e.setCancelled(true);
 
             if (e.getCurrentItem() == null || e.getCurrentItem().getType() == Material.AIR) return;
 
             if (e.getSlot() == 45) {
                 openMainAuction(player);
+                playSound(player, "button-click");
             } else if (e.getSlot() >= 9 && e.getSlot() < 45) {
-                handleExpiredClaim(player, e.getCurrentItem());
+                handleExpiredReclaim(player, e.getCurrentItem());
             }
-        } else if (title.contains("Sell Item")) {
+        } else if (title.equals(getMessage("gui.sell-title"))) {
             if (e.getRawSlot() >= 0 && e.getRawSlot() < 27) {
                 if (e.getRawSlot() == 13) {
                     return;
@@ -372,23 +346,24 @@ public class Auctions extends JavaPlugin implements Listener {
                         pendingItems.put(player.getUniqueId(), item.clone());
                         e.getInventory().setItem(13, null);
                         player.closeInventory();
-                        player.sendMessage(ChatColor.GOLD + "✦ Auction Setup ✦");
-                        player.sendMessage(ChatColor.YELLOW + "Please enter the price for your item in chat:");
-                        player.sendMessage(ChatColor.GRAY + "Type 'cancel' to cancel the auction");
+                        player.sendMessage(getMessage("messages.enter-price-prompt"));
+                        playSound(player, "button-click");
                     } else {
-                        player.sendMessage(ChatColor.RED + "✘ Please place an item first!");
+                        player.sendMessage(getMessage("messages.no-item-placed"));
+                        playSound(player, "error");
                     }
                 } else if (e.getRawSlot() == 18) {
                     player.closeInventory();
+                    playSound(player, "button-click");
                 }
             }
-        } else if (title.contains("Confirm Purchase") || title.contains("Cancel Auction")) {
+        } else if (title.contains(getMessage("gui.confirm-purchase-title")) || title.contains(getMessage("gui.cancel-auction-title"))) {
             e.setCancelled(true);
 
             if (e.getCurrentItem() == null || e.getCurrentItem().getType() == Material.AIR) return;
 
             if (e.getSlot() == 11 && e.getCurrentItem().getType() == Material.EMERALD_BLOCK) {
-                if (title.contains("Confirm Purchase")) {
+                if (title.contains(getMessage("gui.confirm-purchase-title"))) {
                     String auctionId = pendingPurchase.remove(player.getUniqueId());
                     if (auctionId != null) {
                         executePurchase(player, auctionId);
@@ -399,11 +374,13 @@ public class Auctions extends JavaPlugin implements Listener {
                         cancelAuction(player, auctionId);
                     }
                 }
+                playSound(player, "success");
             } else if (e.getSlot() == 15 && e.getCurrentItem().getType() == Material.BARRIER) {
                 pendingPurchase.remove(player.getUniqueId());
                 pendingCancellation.remove(player.getUniqueId());
                 player.closeInventory();
                 openMainAuction(player);
+                playSound(player, "button-click");
             }
         }
     }
@@ -413,7 +390,7 @@ public class Auctions extends JavaPlugin implements Listener {
         if (!(e.getPlayer() instanceof Player)) return;
         Player player = (Player) e.getPlayer();
 
-        if (e.getView().getTitle().contains("Sell Item")) {
+        if (e.getView().getTitle().equals(getMessage("gui.sell-title"))) {
             if (!pendingItems.containsKey(player.getUniqueId())) {
                 ItemStack item = e.getInventory().getItem(13);
                 if (item != null && item.getType() != Material.AIR) {
@@ -435,27 +412,24 @@ public class Auctions extends JavaPlugin implements Listener {
             if (message.equalsIgnoreCase("cancel")) {
                 ItemStack item = pendingItems.remove(player.getUniqueId());
                 player.getInventory().addItem(item);
-                player.sendMessage(ChatColor.RED + "✘ Auction cancelled! Item returned.");
+                player.sendMessage(getMessage("messages.auction-cancelled"));
                 return;
             }
 
             if (message.startsWith("/")) {
-                player.sendMessage(ChatColor.RED + "✘ Invalid action! You must enter a price or type 'cancel'");
-                player.sendMessage(ChatColor.YELLOW + "Please enter the price for your item:");
+                player.sendMessage(getMessage("messages.cannot-use-commands"));
                 return;
             }
 
             try {
                 double price = Double.parseDouble(message);
                 if (price <= 0) {
-                    player.sendMessage(ChatColor.RED + "✘ Price must be greater than 0!");
-                    player.sendMessage(ChatColor.YELLOW + "Please enter a valid price:");
+                    player.sendMessage(getMessage("messages.price-too-low"));
                     return;
                 }
 
-                if (price > 999999999) {
-                    player.sendMessage(ChatColor.RED + "✘ Price is too high! Maximum: $999,999,999");
-                    player.sendMessage(ChatColor.YELLOW + "Please enter a valid price:");
+                if (price > config.getDouble("max-price")) {
+                    player.sendMessage(getMessage("messages.price-too-high").replace("{max}", String.valueOf(config.getDouble("max-price"))));
                     return;
                 }
 
@@ -481,21 +455,24 @@ public class Auctions extends JavaPlugin implements Listener {
                         ? item.getItemMeta().getDisplayName()
                         : item.getType().toString();
 
-                Bukkit.broadcastMessage(ChatColor.GOLD + "═══════════════════════════");
-                Bukkit.broadcastMessage(ChatColor.YELLOW + "✦ NEW AUCTION ✦");
-                Bukkit.broadcastMessage(ChatColor.WHITE + player.getName() + ChatColor.GRAY + " is selling " + ChatColor.AQUA + itemName);
-                Bukkit.broadcastMessage(ChatColor.GOLD + "Price: " + ChatColor.YELLOW + "$" + price);
-                Bukkit.broadcastMessage(ChatColor.GRAY + "Type " + ChatColor.YELLOW + "/ah" + ChatColor.GRAY + " to view!");
-                Bukkit.broadcastMessage(ChatColor.GOLD + "═══════════════════════════");
+                for (String line : getMessage("messages.auction-created-broadcast").split("\n")) {
+                    Bukkit.broadcastMessage(line
+                            .replace("{player}", player.getName())
+                            .replace("{item}", itemName)
+                            .replace("{price}", String.valueOf(price)));
+                }
 
-                player.sendMessage(ChatColor.GREEN + "✔ Your auction has been created successfully!");
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    playSound(p, "auction-created");
+                }
+
+                player.sendMessage(getMessage("messages.auction-created"));
 
             } catch (NumberFormatException ex) {
-                player.sendMessage(ChatColor.RED + "✘ Invalid input! You must enter a number or 'cancel'");
-                player.sendMessage(ChatColor.YELLOW + "Please enter the price for your item:");
+                player.sendMessage(getMessage("messages.invalid-price"));
             } catch (SQLException ex) {
                 ex.printStackTrace();
-                player.sendMessage(ChatColor.RED + "✘ Database error! Please try again.");
+                player.sendMessage(getMessage("messages.database-error"));
                 pendingItems.remove(player.getUniqueId());
             }
         }
@@ -507,8 +484,7 @@ public class Auctions extends JavaPlugin implements Listener {
 
         if (pendingItems.containsKey(player.getUniqueId())) {
             e.setCancelled(true);
-            player.sendMessage(ChatColor.RED + "✘ You cannot use commands while setting a price!");
-            player.sendMessage(ChatColor.YELLOW + "Enter a price or type 'cancel' to exit.");
+            player.sendMessage(getMessage("messages.cannot-use-commands"));
         }
     }
 
@@ -549,7 +525,7 @@ public class Auctions extends JavaPlugin implements Listener {
                 double price = rs.getDouble("price");
                 String sellerName = rs.getString("seller_name");
 
-                Inventory inv = Bukkit.createInventory(null, 27, ChatColor.DARK_GREEN + "✦ Confirm Purchase ✦");
+                Inventory inv = Bukkit.createInventory(null, 27, getMessage("gui.confirm-purchase-title"));
 
                 for (int i = 0; i < 27; i++) {
                     inv.setItem(i, createGlassPane(Material.BLACK_STAINED_GLASS_PANE, " "));
@@ -557,18 +533,19 @@ public class Auctions extends JavaPlugin implements Listener {
 
                 inv.setItem(13, item);
 
-                inv.setItem(11, createMenuItem(Material.EMERALD_BLOCK, ChatColor.GREEN + "✔ CONFIRM",
-                        Arrays.asList(
-                                ChatColor.GRAY + "Price: " + ChatColor.GOLD + "$" + price,
-                                ChatColor.GRAY + "Seller: " + ChatColor.WHITE + sellerName,
-                                ChatColor.YELLOW + "Click to purchase!"
-                        )));
+                List<String> confirmLore = new ArrayList<>();
+                for (String line : getMessage("gui.confirm-purchase-lore").split("\n")) {
+                    confirmLore.add(line.replace("{price}", String.valueOf(price)).replace("{seller}", sellerName));
+                }
 
-                inv.setItem(15, createMenuItem(Material.BARRIER, ChatColor.RED + "✘ CANCEL",
-                        Arrays.asList(ChatColor.GRAY + "Return to auctions")));
+                inv.setItem(11, createMenuItem(Material.EMERALD_BLOCK, getMessage("gui.confirm"), confirmLore));
+
+                inv.setItem(15, createMenuItem(Material.BARRIER, getMessage("gui.cancel-button"),
+                        Arrays.asList(getMessage("gui.return-to-auctions").split("\n"))));
 
                 pendingPurchase.put(player.getUniqueId(), auctionId);
                 player.openInventory(inv);
+                playSound(player, "open-menu");
             }
 
             rs.close();
@@ -590,7 +567,7 @@ public class Auctions extends JavaPlugin implements Listener {
                 ItemStack item = deserializeItem(rs.getBytes("item"));
                 double price = rs.getDouble("price");
 
-                Inventory inv = Bukkit.createInventory(null, 27, ChatColor.DARK_RED + "☠ Cancel Auction? ☠");
+                Inventory inv = Bukkit.createInventory(null, 27, getMessage("gui.cancel-auction-title"));
 
                 for (int i = 0; i < 27; i++) {
                     inv.setItem(i, createGlassPane(Material.RED_STAINED_GLASS_PANE, " "));
@@ -598,18 +575,19 @@ public class Auctions extends JavaPlugin implements Listener {
 
                 inv.setItem(13, item);
 
-                inv.setItem(11, createMenuItem(Material.EMERALD_BLOCK, ChatColor.RED + "✔ CANCEL AUCTION",
-                        Arrays.asList(
-                                ChatColor.GRAY + "Current Price: " + ChatColor.GOLD + "$" + price,
-                                ChatColor.YELLOW + "Item will be returned",
-                                ChatColor.RED + "This cannot be undone!"
-                        )));
+                List<String> cancelLore = new ArrayList<>();
+                for (String line : getMessage("gui.cancel-auction-lore").split("\n")) {
+                    cancelLore.add(line.replace("{price}", String.valueOf(price)));
+                }
 
-                inv.setItem(15, createMenuItem(Material.BARRIER, ChatColor.GREEN + "✘ KEEP AUCTION",
-                        Arrays.asList(ChatColor.GRAY + "Return to auctions")));
+                inv.setItem(11, createMenuItem(Material.EMERALD_BLOCK, getMessage("gui.cancel-confirm"), cancelLore));
+
+                inv.setItem(15, createMenuItem(Material.BARRIER, getMessage("gui.keep-auction"),
+                        Arrays.asList(getMessage("gui.return-to-auctions").split("\n"))));
 
                 pendingCancellation.put(player.getUniqueId(), auctionId);
                 player.openInventory(inv);
+                playSound(player, "open-menu");
             }
 
             rs.close();
@@ -632,8 +610,9 @@ public class Auctions extends JavaPlugin implements Listener {
                 String sellerUUID = rs.getString("seller_uuid");
 
                 if (!economy.has(buyer, price)) {
-                    buyer.sendMessage(ChatColor.RED + "✘ Insufficient funds! You need $" + price);
+                    buyer.sendMessage(getMessage("messages.insufficient-funds").replace("{price}", String.valueOf(price)));
                     buyer.closeInventory();
+                    playSound(buyer, "error");
                     return;
                 }
 
@@ -645,10 +624,11 @@ public class Auctions extends JavaPlugin implements Listener {
                 economy.depositPlayer(seller, price);
 
                 buyer.getInventory().addItem(item);
-                buyer.sendMessage(ChatColor.GREEN + "✔ Successfully purchased item for $" + price + "!");
+                buyer.sendMessage(getMessage("messages.purchase-success").replace("{price}", String.valueOf(price)));
 
                 if (seller.isOnline()) {
-                    seller.getPlayer().sendMessage(ChatColor.GREEN + "✦ Your item was sold for $" + price + "!");
+                    seller.getPlayer().sendMessage(getMessage("messages.item-sold").replace("{price}", String.valueOf(price)));
+                    playSound(seller.getPlayer(), "item-sold");
                 }
 
                 PreparedStatement deletePs = connection.prepareStatement("DELETE FROM auctions WHERE id = ?");
@@ -679,7 +659,7 @@ public class Auctions extends JavaPlugin implements Listener {
                 ItemStack item = deserializeItem(rs.getBytes("item"));
                 if (item != null) {
                     player.getInventory().addItem(item);
-                    player.sendMessage(ChatColor.GREEN + "✔ Auction cancelled! Item returned to your inventory.");
+                    player.sendMessage(getMessage("messages.auction-cancelled-success"));
 
                     PreparedStatement deletePs = connection.prepareStatement("DELETE FROM auctions WHERE id = ?");
                     deletePs.setString(1, auctionId);
@@ -698,23 +678,16 @@ public class Auctions extends JavaPlugin implements Listener {
         }
     }
 
-    private void handleExpiredClaim(Player player, ItemStack displayItem) {
-        LocalDateTime lastClaimTime = lastClaim.get(player.getUniqueId());
-        boolean canClaim = lastClaimTime == null || !lastClaimTime.toLocalDate().equals(LocalDateTime.now().toLocalDate());
-
-        if (!canClaim) {
-            player.sendMessage(ChatColor.RED + "✘ You have already claimed your free item today!");
-            return;
-        }
-
+    private void handleExpiredReclaim(Player player, ItemStack displayItem) {
         String auctionId = getAuctionIdFromLore(displayItem);
         if (auctionId == null) return;
 
         try {
             PreparedStatement ps = connection.prepareStatement(
-                    "SELECT * FROM auctions WHERE id = ? AND expired = 1"
+                    "SELECT * FROM auctions WHERE id = ? AND expired = 1 AND seller_uuid = ?"
             );
             ps.setString(1, auctionId);
+            ps.setString(2, player.getUniqueId().toString());
             ResultSet rs = ps.executeQuery();
 
             if (rs.next()) {
@@ -722,16 +695,16 @@ public class Auctions extends JavaPlugin implements Listener {
                 if (item == null) return;
 
                 player.getInventory().addItem(item);
-                lastClaim.put(player.getUniqueId(), LocalDateTime.now());
 
                 PreparedStatement deletePs = connection.prepareStatement("DELETE FROM auctions WHERE id = ?");
                 deletePs.setString(1, auctionId);
                 deletePs.executeUpdate();
                 deletePs.close();
 
-                player.sendMessage(ChatColor.GREEN + "✔ Successfully claimed your free daily item!");
+                player.sendMessage(getMessage("messages.item-reclaimed"));
                 player.closeInventory();
                 openExpiredAuction(player);
+                playSound(player, "success");
             }
 
             rs.close();
@@ -739,6 +712,26 @@ public class Auctions extends JavaPlugin implements Listener {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+    }
+
+    private int getPlayerActiveAuctions(Player player) {
+        try {
+            PreparedStatement ps = connection.prepareStatement(
+                    "SELECT COUNT(*) FROM auctions WHERE seller_uuid = ? AND expired = 0"
+            );
+            ps.setString(1, player.getUniqueId().toString());
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+
+            rs.close();
+            ps.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
     }
 
     private String getAuctionIdFromLore(ItemStack item) {
@@ -755,18 +748,19 @@ public class Auctions extends JavaPlugin implements Listener {
 
     private void checkExpiredAuctions() {
         long currentTime = System.currentTimeMillis();
-        long threeDays = 3 * 24 * 60 * 60 * 1000;
+        long auctionDuration = config.getLong("auction-duration-hours") * 60 * 60 * 1000;
 
         try {
             PreparedStatement ps = connection.prepareStatement(
                     "SELECT * FROM auctions WHERE expired = 0 AND time < ?"
             );
-            ps.setLong(1, currentTime - threeDays);
+            ps.setLong(1, currentTime - auctionDuration);
             ResultSet rs = ps.executeQuery();
 
             while (rs.next()) {
                 String auctionId = rs.getString("id");
                 ItemStack item = deserializeItem(rs.getBytes("item"));
+                String sellerUUID = rs.getString("seller_uuid");
 
                 PreparedStatement updatePs = connection.prepareStatement(
                         "UPDATE auctions SET expired = 1 WHERE id = ?"
@@ -779,19 +773,38 @@ public class Auctions extends JavaPlugin implements Listener {
                         ? item.getItemMeta().getDisplayName()
                         : item.getType().toString();
 
-                Bukkit.broadcastMessage(ChatColor.RED + "═══════════════════════════");
-                Bukkit.broadcastMessage(ChatColor.DARK_RED + "☠ AUCTION EXPIRED ☠");
-                Bukkit.broadcastMessage(ChatColor.GRAY + "Item: " + ChatColor.WHITE + itemName);
-                Bukkit.broadcastMessage(ChatColor.YELLOW + "Now available for FREE claim!");
-                Bukkit.broadcastMessage(ChatColor.GRAY + "Type " + ChatColor.YELLOW + "/ah expired" + ChatColor.GRAY + " to claim!");
-                Bukkit.broadcastMessage(ChatColor.AQUA + "Limited: 1 free claim per day");
-                Bukkit.broadcastMessage(ChatColor.RED + "═══════════════════════════");
+                Player seller = Bukkit.getPlayer(UUID.fromString(sellerUUID));
+                if (seller != null && seller.isOnline()) {
+                    for (String line : getMessage("messages.auction-expired-notify").split("\n")) {
+                        seller.sendMessage(line.replace("{item}", itemName));
+                    }
+                }
             }
 
             rs.close();
             ps.close();
         } catch (SQLException e) {
             e.printStackTrace();
+        }
+    }
+
+    private String getMessage(String path) {
+        return ChatColor.translateAlternateColorCodes('&', config.getString(path, "Message not found: " + path));
+    }
+
+    private void playSound(Player player, String soundType) {
+        if (!config.getBoolean("sounds.enabled")) return;
+
+        String soundPath = "sounds." + soundType;
+        if (config.contains(soundPath)) {
+            try {
+                Sound sound = Sound.valueOf(config.getString(soundPath + ".sound"));
+                float volume = (float) config.getDouble(soundPath + ".volume");
+                float pitch = (float) config.getDouble(soundPath + ".pitch");
+                player.playSound(player.getLocation(), sound, volume, pitch);
+            } catch (Exception e) {
+                getLogger().warning("Invalid sound configuration for: " + soundType);
+            }
         }
     }
 
