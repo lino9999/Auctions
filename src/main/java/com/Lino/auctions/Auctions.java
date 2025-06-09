@@ -13,6 +13,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -389,17 +390,32 @@ public class Auctions extends JavaPlugin implements Listener {
         if (pendingItems.containsKey(player.getUniqueId())) {
             e.setCancelled(true);
 
-            if (e.getMessage().equalsIgnoreCase("cancel")) {
+            String message = e.getMessage().trim();
+
+            if (message.equalsIgnoreCase("cancel")) {
                 ItemStack item = pendingItems.remove(player.getUniqueId());
                 player.getInventory().addItem(item);
                 player.sendMessage(ChatColor.RED + "✘ Auction cancelled! Item returned.");
                 return;
             }
 
+            if (message.startsWith("/")) {
+                player.sendMessage(ChatColor.RED + "✘ Invalid action! You must enter a price or type 'cancel'");
+                player.sendMessage(ChatColor.YELLOW + "Please enter the price for your item:");
+                return;
+            }
+
             try {
-                double price = Double.parseDouble(e.getMessage());
+                double price = Double.parseDouble(message);
                 if (price <= 0) {
                     player.sendMessage(ChatColor.RED + "✘ Price must be greater than 0!");
+                    player.sendMessage(ChatColor.YELLOW + "Please enter a valid price:");
+                    return;
+                }
+
+                if (price > 999999999) {
+                    player.sendMessage(ChatColor.RED + "✘ Price is too high! Maximum: $999,999,999");
+                    player.sendMessage(ChatColor.YELLOW + "Please enter a valid price:");
                     return;
                 }
 
@@ -432,12 +448,27 @@ public class Auctions extends JavaPlugin implements Listener {
                 Bukkit.broadcastMessage(ChatColor.GRAY + "Type " + ChatColor.YELLOW + "/ah" + ChatColor.GRAY + " to view!");
                 Bukkit.broadcastMessage(ChatColor.GOLD + "═══════════════════════════");
 
+                player.sendMessage(ChatColor.GREEN + "✔ Your auction has been created successfully!");
+
             } catch (NumberFormatException ex) {
-                player.sendMessage(ChatColor.RED + "✘ Invalid price! Please enter a valid number.");
+                player.sendMessage(ChatColor.RED + "✘ Invalid input! You must enter a number or 'cancel'");
+                player.sendMessage(ChatColor.YELLOW + "Please enter the price for your item:");
             } catch (SQLException ex) {
                 ex.printStackTrace();
                 player.sendMessage(ChatColor.RED + "✘ Database error! Please try again.");
+                pendingItems.remove(player.getUniqueId());
             }
+        }
+    }
+
+    @EventHandler
+    public void onCommandPreprocess(PlayerCommandPreprocessEvent e) {
+        Player player = e.getPlayer();
+
+        if (pendingItems.containsKey(player.getUniqueId())) {
+            e.setCancelled(true);
+            player.sendMessage(ChatColor.RED + "✘ You cannot use commands while setting a price!");
+            player.sendMessage(ChatColor.YELLOW + "Enter a price or type 'cancel' to exit.");
         }
     }
 
