@@ -1,0 +1,13 @@
+name: Auctions
+version: '1.0'
+main: com.Lino.auctions.Auctions
+api-version: '1.21'
+depend: [Vault]
+author: Lino
+description: Advanced auction system for players
+
+commands:
+  auction:
+    description: Main auction command
+    aliases: [ah]
+    usage: /<command> [sell/expired]
