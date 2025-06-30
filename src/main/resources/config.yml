@@ -5,6 +5,7 @@
 auction-duration-hours: 72  # How long auctions last (default 3 days)
 max-auctions-per-player: 3  # Maximum number of active auctions per player
 max-price: 99999999  # Maximum price for an auction
+currency-symbol: "$"  # Currency symbol to display (you can use € ¥ £ $ or any custom symbol)
 
 # Sound Settings
 sounds:
@@ -73,8 +74,8 @@ gui:
   click-reclaim: "&a» Click to reclaim your item!"
 
   # Confirmation Lore
-  confirm-purchase-lore: "&7Price: &6${price}\n&7Seller: &f{seller}\n&eClick to purchase!"
-  cancel-auction-lore: "&7Current Price: &6${price}\n&eItem will be returned\n&cThis cannot be undone!"
+  confirm-purchase-lore: "&7Price: &6{currency}{price}\n&7Seller: &f{seller}\n&eClick to purchase!"
+  cancel-auction-lore: "&7Current Price: &6{currency}{price}\n&eItem will be returned\n&cThis cannot be undone!"
 
 # Messages
 messages:
@@ -88,19 +89,19 @@ messages:
   auction-cancelled: "&c✘ Auction cancelled! Item returned."
   cannot-use-commands: "&c✘ You cannot use commands while setting a price!\n&eEnter a price or type 'cancel' to exit."
   price-too-low: "&c✘ Price must be greater than 0!\n&ePlease enter a valid price:"
-  price-too-high: "&c✘ Price is too high! Maximum: ${max}\n&ePlease enter a valid price:"
+  price-too-high: "&c✘ Price is too high! Maximum: {currency}{max}\n&ePlease enter a valid price:"
   invalid-price: "&c✘ Invalid input! You must enter a number or 'cancel'\n&ePlease enter the price for your item:"
   database-error: "&c✘ Database error! Please try again."
   auction-created: "&a✔ Your auction has been created successfully!"
   max-auctions-reached: "&c✘ You have reached the maximum of {max} active auctions!"
 
   # Broadcast
-  auction-created-broadcast: "&6═══════════════════════════\n&e✦ NEW AUCTION ✦\n&f{player} &7is selling &b{item}\n&6Price: &e${price}\n&7Type &e/ah &7to view!\n&6═══════════════════════════"
+  auction-created-broadcast: "&6═══════════════════════════\n&e✦ NEW AUCTION ✦\n&f{player} &7is selling &b{item}\n&6Price: &e{currency}{price}\n&7Type &e/ah &7to view!\n&6═══════════════════════════"
 
   # Purchase/Sale
-  insufficient-funds: "&c✘ Insufficient funds! You need ${price}"
-  purchase-success: "&a✔ Successfully purchased item for ${price}!"
-  item-sold: "&a✦ Your item was sold for ${price}!"
+  insufficient-funds: "&c✘ Insufficient funds! You need {currency}{price}"
+  purchase-success: "&a✔ Successfully purchased item for {currency}{price}!"
+  item-sold: "&a✦ Your item was sold for {currency}{price}!"
   auction-cancelled-success: "&a✔ Auction cancelled! Item returned to your inventory."
 
   # Expired Items

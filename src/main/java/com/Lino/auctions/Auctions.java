@@ -177,7 +177,7 @@ public class Auctions extends JavaPlugin implements Listener {
 
                     lore.add("");
                     lore.add(ChatColor.DARK_PURPLE + "═══════════════");
-                    lore.add(getMessage("gui.price-label") + ChatColor.YELLOW + "$" + price);
+                    lore.add(getMessage("gui.price-label") + ChatColor.YELLOW + getCurrencySymbol() + price);
                     lore.add(getMessage("gui.seller-label") + ChatColor.WHITE + sellerName);
 
                     long timeLeft = time + (config.getLong("auction-duration-hours") * 60 * 60 * 1000) - System.currentTimeMillis();
@@ -242,7 +242,7 @@ public class Auctions extends JavaPlugin implements Listener {
 
                     lore.add("");
                     lore.add(ChatColor.DARK_RED + "═══════════════");
-                    lore.add(getMessage("gui.original-price-label") + ChatColor.RED + "$" + price);
+                    lore.add(getMessage("gui.original-price-label") + ChatColor.RED + getCurrencySymbol() + price);
                     lore.add(ChatColor.DARK_RED + "═══════════════");
                     lore.add(getMessage("gui.click-reclaim"));
                     lore.add(ChatColor.DARK_GRAY + "ID: " + auctionId);
@@ -429,7 +429,7 @@ public class Auctions extends JavaPlugin implements Listener {
                 }
 
                 if (price > config.getDouble("max-price")) {
-                    player.sendMessage(getMessage("messages.price-too-high").replace("{max}", String.valueOf(config.getDouble("max-price"))));
+                    player.sendMessage(formatMessage(getMessage("messages.price-too-high"), price, config.getDouble("max-price"), "", ""));
                     return;
                 }
 
@@ -456,10 +456,7 @@ public class Auctions extends JavaPlugin implements Listener {
                         : item.getType().toString();
 
                 for (String line : getMessage("messages.auction-created-broadcast").split("\n")) {
-                    Bukkit.broadcastMessage(line
-                            .replace("{player}", player.getName())
-                            .replace("{item}", itemName)
-                            .replace("{price}", String.valueOf(price)));
+                    Bukkit.broadcastMessage(formatMessage(line, price, 0, player.getName(), itemName));
                 }
 
                 for (Player p : Bukkit.getOnlinePlayers()) {
@@ -535,7 +532,7 @@ public class Auctions extends JavaPlugin implements Listener {
 
                 List<String> confirmLore = new ArrayList<>();
                 for (String line : getMessage("gui.confirm-purchase-lore").split("\n")) {
-                    confirmLore.add(line.replace("{price}", String.valueOf(price)).replace("{seller}", sellerName));
+                    confirmLore.add(formatMessage(line, price, 0, sellerName, ""));
                 }
 
                 inv.setItem(11, createMenuItem(Material.EMERALD_BLOCK, getMessage("gui.confirm"), confirmLore));
@@ -577,7 +574,7 @@ public class Auctions extends JavaPlugin implements Listener {
 
                 List<String> cancelLore = new ArrayList<>();
                 for (String line : getMessage("gui.cancel-auction-lore").split("\n")) {
-                    cancelLore.add(line.replace("{price}", String.valueOf(price)));
+                    cancelLore.add(formatMessage(line, price, 0, "", ""));
                 }
 
                 inv.setItem(11, createMenuItem(Material.EMERALD_BLOCK, getMessage("gui.cancel-confirm"), cancelLore));
@@ -610,7 +607,7 @@ public class Auctions extends JavaPlugin implements Listener {
                 String sellerUUID = rs.getString("seller_uuid");
 
                 if (!economy.has(buyer, price)) {
-                    buyer.sendMessage(getMessage("messages.insufficient-funds").replace("{price}", String.valueOf(price)));
+                    buyer.sendMessage(formatMessage(getMessage("messages.insufficient-funds"), price, 0, "", ""));
                     buyer.closeInventory();
                     playSound(buyer, "error");
                     return;
@@ -624,10 +621,10 @@ public class Auctions extends JavaPlugin implements Listener {
                 economy.depositPlayer(seller, price);
 
                 buyer.getInventory().addItem(item);
-                buyer.sendMessage(getMessage("messages.purchase-success").replace("{price}", String.valueOf(price)));
+                buyer.sendMessage(formatMessage(getMessage("messages.purchase-success"), price, 0, "", ""));
 
                 if (seller.isOnline()) {
-                    seller.getPlayer().sendMessage(getMessage("messages.item-sold").replace("{price}", String.valueOf(price)));
+                    seller.getPlayer().sendMessage(formatMessage(getMessage("messages.item-sold"), price, 0, "", ""));
                     playSound(seller.getPlayer(), "item-sold");
                 }
 
@@ -790,6 +787,21 @@ public class Auctions extends JavaPlugin implements Listener {
 
     private String getMessage(String path) {
         return ChatColor.translateAlternateColorCodes('&', config.getString(path, "Message not found: " + path));
+    }
+
+    private String getCurrencySymbol() {
+        return config.getString("currency-symbol", "$");
+    }
+
+    private String formatMessage(String message, double price, double maxPrice, String playerName, String itemName) {
+        String currencySymbol = getCurrencySymbol();
+        return message
+                .replace("{currency}", currencySymbol)
+                .replace("{price}", String.valueOf(price))
+                .replace("{max}", String.valueOf(maxPrice))
+                .replace("{player}", playerName)
+                .replace("{item}", itemName)
+                .replace("{seller}", playerName);
     }
 
     private void playSound(Player player, String soundType) {
