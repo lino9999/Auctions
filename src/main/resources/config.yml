@@ -1,0 +1,108 @@
+# Auctions Plugin Configuration
+# Use & for color codes
+
+# Auction Settings
+auction-duration-hours: 72  # How long auctions last (default 3 days)
+max-auctions-per-player: 3  # Maximum number of active auctions per player
+max-price: 99999999  # Maximum price for an auction
+
+# Sound Settings
+sounds:
+  enabled: true  # Enable/disable all sounds
+  open-menu:
+    sound: BLOCK_CHEST_OPEN
+    volume: 0.5
+    pitch: 1.0
+  button-click:
+    sound: UI_BUTTON_CLICK
+    volume: 0.5
+    pitch: 1.0
+  success:
+    sound: ENTITY_PLAYER_LEVELUP
+    volume: 0.7
+    pitch: 1.2
+  error:
+    sound: ENTITY_VILLAGER_NO
+    volume: 0.5
+    pitch: 0.8
+  auction-created:
+    sound: BLOCK_NOTE_BLOCK_PLING
+    volume: 0.6
+    pitch: 1.5
+  item-sold:
+    sound: ENTITY_EXPERIENCE_ORB_PICKUP
+    volume: 0.7
+    pitch: 1.0
+
+# GUI Titles and Labels
+gui:
+  main-title: "&5✦ &dActive Auctions &5✦"
+  expired-title: "&4☠ &cYour Expired Items &4☠"
+  sell-title: "&6♦ &eSell Item &6♦"
+  confirm-purchase-title: "&2✦ Confirm Purchase ✦"
+  cancel-auction-title: "&4☠ Cancel Auction? ☠"
+
+  # Button Names
+  create-auction: "&a✦ Create Auction"
+  create-auction-lore: "&7Click to sell an item\n&eLeft-Click to open"
+  expired-items: "&e☀ Expired Items"
+  expired-items-lore: "&7View your expired auctions\n&aReclaim your items for free!"
+  refresh: "&b⟳ Refresh"
+  refresh-lore: "&7Click to update the list\n&eSee latest auctions!"
+  back: "&e« Back"
+  back-lore: "&7Return to main menu"
+  confirm-sale: "&a✔ Confirm Sale"
+  confirm-sale-lore: "&7Click after placing item\n&eYou'll set the price next"
+  cancel: "&c✘ Cancel"
+  cancel-lore: "&7Return to auctions"
+  confirm: "&a✔ CONFIRM"
+  cancel-button: "&c✘ CANCEL"
+  cancel-confirm: "&c✔ CANCEL AUCTION"
+  keep-auction: "&a✘ KEEP AUCTION"
+  return-to-auctions: "&7Return to auctions"
+
+  # Labels
+  price-label: "&6✦ Price: "
+  seller-label: "&b✦ Seller: "
+  expires-label: "&c✦ Expires in: "
+  original-price-label: "&7✦ Original Price: "
+
+  # Click Actions
+  click-cancel: "&c» Click to cancel auction!"
+  click-purchase: "&a» Click to purchase!"
+  click-reclaim: "&a» Click to reclaim your item!"
+
+  # Confirmation Lore
+  confirm-purchase-lore: "&7Price: &6${price}\n&7Seller: &f{seller}\n&eClick to purchase!"
+  cancel-auction-lore: "&7Current Price: &6${price}\n&eItem will be returned\n&cThis cannot be undone!"
+
+# Messages
+messages:
+  # General
+  reload: "&aAuctions configuration reloaded!"
+  no-permission: "&cYou don't have permission to use this command!"
+
+  # Auction Creation
+  enter-price-prompt: "&6✦ Auction Setup ✦\n&ePlease enter the price for your item in chat:\n&7Type 'cancel' to cancel the auction"
+  no-item-placed: "&c✘ Please place an item first!"
+  auction-cancelled: "&c✘ Auction cancelled! Item returned."
+  cannot-use-commands: "&c✘ You cannot use commands while setting a price!\n&eEnter a price or type 'cancel' to exit."
+  price-too-low: "&c✘ Price must be greater than 0!\n&ePlease enter a valid price:"
+  price-too-high: "&c✘ Price is too high! Maximum: ${max}\n&ePlease enter a valid price:"
+  invalid-price: "&c✘ Invalid input! You must enter a number or 'cancel'\n&ePlease enter the price for your item:"
+  database-error: "&c✘ Database error! Please try again."
+  auction-created: "&a✔ Your auction has been created successfully!"
+  max-auctions-reached: "&c✘ You have reached the maximum of {max} active auctions!"
+
+  # Broadcast
+  auction-created-broadcast: "&6═══════════════════════════\n&e✦ NEW AUCTION ✦\n&f{player} &7is selling &b{item}\n&6Price: &e${price}\n&7Type &e/ah &7to view!\n&6═══════════════════════════"
+
+  # Purchase/Sale
+  insufficient-funds: "&c✘ Insufficient funds! You need ${price}"
+  purchase-success: "&a✔ Successfully purchased item for ${price}!"
+  item-sold: "&a✦ Your item was sold for ${price}!"
+  auction-cancelled-success: "&a✔ Auction cancelled! Item returned to your inventory."
+
+  # Expired Items
+  item-reclaimed: "&a✔ Successfully reclaimed your expired item!"
+  auction-expired-notify: "&c✦ Your auction has expired!\n&7Item: &f{item}\n&eUse &a/ah expired &eto reclaim it for free!"
