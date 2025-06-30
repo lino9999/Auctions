@@ -333,12 +333,11 @@ public class Auctions extends JavaPlugin implements Listener {
                 handleExpiredReclaim(player, e.getCurrentItem());
             }
         } else if (title.equals(getMessage("gui.sell-title"))) {
-            if (e.getRawSlot() == 13) {
-                // Permetti l'inserimento dell'item nello slot 13
-                return;
-            }
-
             if (e.getRawSlot() >= 0 && e.getRawSlot() < 27) {
+                if (e.getRawSlot() == 13) {
+                    return;
+                }
+
                 e.setCancelled(true);
 
                 if (e.getRawSlot() == 22) {
