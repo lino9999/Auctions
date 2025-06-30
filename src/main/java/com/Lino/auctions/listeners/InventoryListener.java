@@ -6,6 +6,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
 public class InventoryListener implements Listener {
@@ -83,19 +84,25 @@ public class InventoryListener implements Listener {
     }
 
     private void handleSellMenuClick(InventoryClickEvent e, Player player) {
-        // Allow interactions only in slot 13 (item placement slot)
-        if (e.getRawSlot() >= 0 && e.getRawSlot() < 27) {
-            if (e.getRawSlot() == 13) {
-                return; // Allow free interaction in item slot
-            }
+        String sellMenuTitle = plugin.getMessageManager().getMessage("gui.sell-title");
+        if (!e.getView().getTitle().equals(sellMenuTitle)) {
+            return;
+        }
 
-            e.setCancelled(true);
+        Inventory clickedInventory = e.getClickedInventory();
+        Inventory topInventory = e.getView().getTopInventory();
+        ItemStack currentItemInSlot = topInventory.getItem(13);
+        ItemStack clickedItem = e.getCurrentItem();
 
-            if (e.getRawSlot() == 22) { // Confirm sale button
-                ItemStack item = e.getInventory().getItem(13);
-                if (item != null && item.getType().name() != "AIR") {
-                    plugin.getAuctionManager().setPendingItem(player.getUniqueId(), item.clone());
-                    e.getInventory().setItem(13, null);
+        // Case 1: Click on a button or decorative slot in the sell GUI
+        if (clickedInventory != null && clickedInventory.equals(topInventory)) {
+            e.setCancelled(true); // Always cancel clicks in the top GUI
+
+            // If the player clicks the confirm button (slot 22)
+            if (e.getRawSlot() == 22) {
+                if (currentItemInSlot != null && !currentItemInSlot.getType().isAir()) {
+                    plugin.getAuctionManager().setPendingItem(player.getUniqueId(), currentItemInSlot.clone());
+                    topInventory.setItem(13, null); // Remove the item from the GUI
                     player.closeInventory();
                     player.sendMessage(plugin.getMessageManager().getMessage("messages.enter-price-prompt"));
                     plugin.getSoundManager().playSound(player, "button-click");
@@ -103,10 +110,39 @@ public class InventoryListener implements Listener {
                     player.sendMessage(plugin.getMessageManager().getMessage("messages.no-item-placed"));
                     plugin.getSoundManager().playSound(player, "error");
                 }
-            } else if (e.getRawSlot() == 18) { // Cancel button
-                player.closeInventory();
+            }
+            // If the player clicks the cancel button (slot 18)
+            else if (e.getRawSlot() == 18) {
+                player.closeInventory(); // The onInventoryClose event will handle returning the item
                 plugin.getSoundManager().playSound(player, "button-click");
             }
+            // If the player clicks the item slot to retrieve the item
+            else if (e.getRawSlot() == 13 && currentItemInSlot != null && !currentItemInSlot.getType().isAir()) {
+                player.getInventory().addItem(currentItemInSlot);
+                topInventory.setItem(13, null);
+                plugin.getSoundManager().playSound(player, "button-click");
+            }
+            return;
+        }
+
+        // Case 2: Click on the player's inventory to move an item
+        if (clickedInventory != null && clickedInventory.equals(player.getInventory())) {
+            e.setCancelled(true); // Prevent the default inventory click behavior
+
+            if (clickedItem == null || clickedItem.getType().isAir()) {
+                return; // The player clicked an empty slot in their inventory
+            }
+
+            // If there is already an item in the GUI, return it to the player
+            if (currentItemInSlot != null && !currentItemInSlot.getType().isAir()) {
+                player.getInventory().addItem(currentItemInSlot);
+            }
+
+            // Place the newly clicked item into the GUI
+            topInventory.setItem(13, clickedItem.clone());
+            // Remove the clicked item from the player's inventory
+            clickedInventory.setItem(e.getSlot(), null);
+            plugin.getSoundManager().playSound(player, "button-click");
         }
     }
 
@@ -164,7 +200,7 @@ public class InventoryListener implements Listener {
         if (e.getView().getTitle().equals(plugin.getMessageManager().getMessage("gui.sell-title"))) {
             if (!plugin.getAuctionManager().hasPendingItem(player.getUniqueId())) {
                 ItemStack item = e.getInventory().getItem(13);
-                if (item != null && item.getType().name() != "AIR") {
+                if (item != null && !item.getType().isAir()) {
                     player.getInventory().addItem(item);
                 }
             }
