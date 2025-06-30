@@ -5,7 +5,7 @@
 auction-duration-hours: 72  # How long auctions last (default 3 days)
 max-auctions-per-player: 3  # Maximum number of active auctions per player
 max-price: 99999999  # Maximum price for an auction
-currency-symbol: "$"  # Currency symbol to display (you can use € ¥ £ $ or any custom symbol)
+currency-symbol: "$"  # Currency symbol to display (you can use € ¥ £ $ ⛁ or any custom symbol)
 
 # Sound Settings
 sounds:
