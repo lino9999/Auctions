@@ -1,38 +1,27 @@
-# Nombre del workflow que aparecerá en la pestaña "Actions" de GitHub
 name: Build and Release Plugin
 
-# Configura cuándo se debe ejecutar este workflow
 on:
-  # Se ejecuta cada vez que haces un "push" a la rama "main"
   push:
-    branches: [ "main" ] # Puedes cambiar "main" a "master" si usas esa rama
-  # También permite ejecutarlo manualmente desde la pestaña Actions
+    branches: [ "master" ]
   workflow_dispatch:
 
-# Define los trabajos (jobs) que se ejecutarán
 jobs:
   build-and-release:
-    # Se ejecutará en un servidor virtual con la última versión de Ubuntu
     runs-on: ubuntu-latest
 
-    # Otorga permisos al workflow para escribir en el repositorio (crear releases)
     permissions:
       contents: write
 
-    # Pasos que seguirá el trabajo
     steps:
-      # 1. Clona tu repositorio en el servidor virtual
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Configura el entorno de Java (JDK)
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '21' # Versión requerida por tu pom.xml
+          java-version: '21'
           distribution: 'temurin'
 
-      # 3. Caché de dependencias de Maven para acelerar futuras compilaciones
       - name: Cache Maven packages
         uses: actions/cache@v4
         with:
@@ -41,34 +30,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      # 4. Compila el proyecto con Maven
       - name: Build with Maven
         run: mvn -B package --file pom.xml
 
-      # 5. Extrae la versión del plugin desde el pom.xml
-      # A diferencia de tu ejemplo con Gradle, aquí usamos Maven para obtener la versión
       - name: Extract plugin version
         id: get_version
         run: echo "PLUGIN_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_ENV
 
-      # 6. Crea la Release en GitHub
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          # El token es generado automáticamente por GitHub
           token: ${{ secrets.GITHUB_TOKEN }}
-          # El archivo JAR que se adjuntará a la release
-          # Usa la versión extraída para encontrar el archivo correcto
           artifacts: "target/Auctions-${{ env.PLUGIN_VERSION }}.jar"
-          # El nombre del tag de Git que se creará (ej. v1.0)
           tag: v${{ env.PLUGIN_VERSION }}
-          # El título de la Release
           name: Release v${{ env.PLUGIN_VERSION }}
-          # El cuerpo/descripción de la Release (puedes personalizarlo)
           body: |
             ## 🎉 New Release!
             Automatic release generated upon merging to the main branch.
             
             **Commit:** `${{ github.sha }}`
-          # Permite que el workflow actualice una release si el tag ya existe
           allowUpdates: true
