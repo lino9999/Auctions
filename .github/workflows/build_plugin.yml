@@ -1,0 +1,52 @@
+name: Build and Release Plugin
+
+on:
+  push:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Build with Maven
+        run: mvn -B package --file pom.xml
+
+      - name: Extract plugin version
+        id: get_version
+        run: echo "PLUGIN_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_ENV
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: "target/Auctions-${{ env.PLUGIN_VERSION }}.jar"
+          tag: v${{ env.PLUGIN_VERSION }}
+          name: Release v${{ env.PLUGIN_VERSION }}
+          body: |
+            ## 🎉 New Release!
+            Automatic release generated upon merging to the main branch.
+            
+            **Commit:** `${{ github.sha }}`
+          allowUpdates: true

@@ -28,11 +28,16 @@ public class MessageManager {
         }
 
         // Legacy placeholders for backwards compatibility
-        if (placeholders.length >= 1) formatted = formatted.replace("{price}", String.valueOf(placeholders[0]));
-        if (placeholders.length >= 2) formatted = formatted.replace("{max}", String.valueOf(placeholders[1]));
-        if (placeholders.length >= 3) formatted = formatted.replace("{player}", String.valueOf(placeholders[2]));
-        if (placeholders.length >= 4) formatted = formatted.replace("{item}", String.valueOf(placeholders[3]));
-        if (placeholders.length >= 3) formatted = formatted.replace("{seller}", String.valueOf(placeholders[2]));
+        if (message.contains("{price}") && placeholders.length >= 1) formatted = formatted.replace("{price}", String.valueOf(placeholders[0]));
+        if (message.contains("{max}")) {
+            if (placeholders.length == 1) formatted = formatted.replace("{max}", String.valueOf(placeholders[0]));
+            if (placeholders.length >= 2) formatted = formatted.replace("{max}", String.valueOf(placeholders[1]));
+        }
+        if ((message.contains("{player}") || message.contains("{seller}")) && placeholders.length >= 3) {
+            formatted = formatted.replace("{player}", String.valueOf(placeholders[2]));
+            formatted = formatted.replace("{seller}", String.valueOf(placeholders[2]));
+        }
+        if (message.contains("{item}") && placeholders.length >= 4) formatted = formatted.replace("{item}", String.valueOf(placeholders[3]));
 
         return formatted;
     }
